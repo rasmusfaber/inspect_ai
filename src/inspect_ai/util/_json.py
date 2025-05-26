@@ -1,3 +1,4 @@
+import enum
 import types
 import typing
 from copy import deepcopy
