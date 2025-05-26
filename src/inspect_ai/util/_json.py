@@ -103,9 +103,9 @@ def json_schema(t: Type[Any]) -> JSONSchema:
             return cls_json_schema(t)
         elif t is type(None):
             return JSONSchema(type="null")
-        elif t is enum:
+        elif isinstance(t, enum.EnumType):
             return JSONSchema(
-                type="string", enum=[e.value for e in t] if hasattr(t, "value") else []
+                type="string", enum=list(t)
             )
         else:
             return JSONSchema()
