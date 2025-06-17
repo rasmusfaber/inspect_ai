@@ -584,6 +584,7 @@ def task_identifier(task: ResolvedTask | EvalLog) -> str:
 
     # hash for task args
     task_args_json = to_json(task_args, exclude_none=True, fallback=lambda _x: None)
+    logging.info(f"{task_file}@{task_name}: task_args={task_args}")
     logging.info(f"{task_file}@{task_name}: task_args_json={task_args_json}")
     task_args_hash = hashlib.sha256(
         task_args_json
