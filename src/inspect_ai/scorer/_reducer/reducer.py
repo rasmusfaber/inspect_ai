@@ -315,7 +315,7 @@ def _check_value_dict(scores: list[Score]) -> None:
     for score in scores:
         if not isinstance(score.value, dict):
             raise ValueError(
-                "Attempting to reduce a dictionary score for a non-dictionary value"
+                f"Attempting to reduce a dictionary score for a non-dictionary value: {score.value}"
             )
 
 
