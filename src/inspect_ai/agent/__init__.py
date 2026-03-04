@@ -12,6 +12,8 @@ from ._handoff import handoff
 from ._human.agent import human_cli
 from ._react import react
 from ._run import run
+from ._setting import OnTurn, Setting, Workspace, setting
+from ._setting_utils import OnTurnResult, handle_on_turn, tools_from_setting
 from ._types import (
     AgentAttempts,
     AgentContinue,
@@ -45,4 +47,11 @@ __all__ = [
     "AgentAttempts",
     "AgentContinue",
     "AgentSubmit",
+    "OnTurn",
+    "Setting",
+    "Workspace",
+    "setting",
+    "OnTurnResult",
+    "handle_on_turn",
+    "tools_from_setting",
 ]

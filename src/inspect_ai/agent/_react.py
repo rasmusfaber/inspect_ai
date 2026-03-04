@@ -29,6 +29,7 @@ from inspect_ai.tool._tool_info import parse_tool_info
 from ._agent import Agent, AgentState, agent, agent_with, is_agent
 from ._filter import MessageFilter
 from ._handoff import has_handoff
+from ._setting_utils import handle_on_turn, tools_from_setting
 from ._types import (
     DEFAULT_CONTINUE_PROMPT,
     DEFAULT_CONTINUE_PROMPT_NO_SUBMIT,
@@ -145,8 +146,8 @@ def react(
 
         return execute
 
-    # resolve tools
-    tools = list(tools) if tools is not None else []
+    # resolve tools list
+    tools: list[Tool | ToolDef | ToolSource] = list(tools) if tools is not None else []
 
     # resolve submit tool
     submit_tool = (
@@ -180,7 +181,12 @@ def react(
         )
 
     async def execute(state: AgentState) -> AgentState:
-        async with mcp_connection(tools):
+        # merge setting tools at solve time (not construction time)
+        resolved_tools = tools_from_setting(
+            list(tools), framework_tools={submit_tool.name}
+        )
+
+        async with mcp_connection(resolved_tools):
             # prepend system message if we have one
             if system_message:
                 state.messages.insert(0, system_message)
@@ -189,7 +195,7 @@ def react(
             overflow = _resolve_overflow(truncation)
 
             # create compact function
-            compact = _agent_compact(compaction, state.messages, tools, model)
+            compact = _agent_compact(compaction, state.messages, resolved_tools, model)
 
             # track attempts
             attempt_count = 0
@@ -202,7 +208,7 @@ def react(
             while True:
                 # generate output and append assistant message
                 state = await _agent_generate(
-                    model, state, tools, retry_refusals, compact
+                    model, state, resolved_tools, retry_refusals, compact
                 )
 
                 # check for context window overflow
@@ -225,7 +231,9 @@ def react(
                 # resolve tool calls (if any)
                 if state.output.message.tool_calls:
                     # call tool functions
-                    messages, output = await execute_tools(state.messages, tools)
+                    messages, output = await execute_tools(
+                        state.messages, resolved_tools
+                    )
                     state.messages.extend(messages)
                     if output:
                         state.output = output
@@ -280,6 +288,17 @@ def react(
                             state.messages.append(
                                 ChatMessageUser(content=response_message)
                             )
+
+                # fire setting on_turn callback
+                on_turn_result = await handle_on_turn()
+                if on_turn_result.action == "break":
+                    break
+                elif on_turn_result.action == "continue":
+                    if on_turn_result.message is not None:
+                        state.messages.append(
+                            ChatMessageUser(content=on_turn_result.message)
+                        )
+                    continue
 
                 # call the on_continue hook (if any)
                 if callable(on_continue):
@@ -342,14 +361,17 @@ def react_no_submit(
     compaction: CompactionStrategy | None,
     truncation: Literal["auto", "disabled"] | MessageFilter,
 ) -> Agent:
-    # resolve tools
-    tools = list(tools) if tools is not None else []
+    # resolve tools list
+    tools: list[Tool | ToolDef | ToolSource] = list(tools) if tools is not None else []
 
     # resolve prompt / system message
     system_message = _prompt_to_system_message(prompt, tools, None)
 
     async def execute(state: AgentState) -> AgentState:
-        async with mcp_connection(tools):
+        # merge setting tools at solve time (not construction time)
+        resolved_tools = tools_from_setting(list(tools))
+
+        async with mcp_connection(resolved_tools):
             # prepend system message if we have one
             if system_message:
                 state.messages.insert(0, system_message)
@@ -358,7 +380,7 @@ def react_no_submit(
             overflow = _resolve_overflow(truncation)
 
             # create compact function
-            compact = _agent_compact(compaction, state.messages, tools, model)
+            compact = _agent_compact(compaction, state.messages, resolved_tools, model)
 
             # track consecutive content_filter responses
             consecutive_content_filter = 0
@@ -367,7 +389,7 @@ def react_no_submit(
             while True:
                 # generate output and append assistant message
                 state = await _agent_generate(
-                    model, state, tools, retry_refusals, compact
+                    model, state, resolved_tools, retry_refusals, compact
                 )
 
                 # check for context window overflow
@@ -390,10 +412,23 @@ def react_no_submit(
                 # resolve tool calls (if any)
                 if state.output.message.tool_calls:
                     # call tool functions
-                    messages, output = await execute_tools(state.messages, tools)
+                    messages, output = await execute_tools(
+                        state.messages, resolved_tools
+                    )
                     state.messages.extend(messages)
                     if output:
                         state.output = output
+
+                # fire setting on_turn callback
+                on_turn_result = await handle_on_turn()
+                if on_turn_result.action == "break":
+                    break
+                elif on_turn_result.action == "continue":
+                    if on_turn_result.message is not None:
+                        state.messages.append(
+                            ChatMessageUser(content=on_turn_result.message)
+                        )
+                    continue
 
                 # call the on_continue hook (if any)
                 if on_continue:
